@@ -81,6 +81,7 @@ public class Core {
 		isGameover = false;
 		isWin = false;
 		remain = rowSize * colSize - mineSize;
+		flags = 0;
 
 		grids = new char[rowSize][colSize];
 		status = new int[rowSize][colSize];
