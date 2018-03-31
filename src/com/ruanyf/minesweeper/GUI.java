@@ -12,6 +12,8 @@ import java.awt.Insets;
 import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
 /**
  * 扫雷GUI
@@ -21,6 +23,11 @@ import java.awt.event.ActionListener;
 public class GUI extends JFrame {
 
 	public static final String TITLE = "minesweepeR";
+	public static final String SYMBOL_MINE = "💀";
+	public static final String SYMBOL_FLAG = "🚩";
+	
+	// 数字颜色 (1~8)
+	public static final Color[] COLORS_NUM = { new Color(64, 80, 192), new Color(16, 102, 0), new Color(176, 0, 0), new Color(0, 0, 128), new Color(128, 0, 0), new Color(0, 128, 128), new Color(160, 0, 0), new Color(176, 0, 0) };
 
 	private JPanel titlePane;
 	private JPanel gamePane;
@@ -51,23 +58,31 @@ public class GUI extends JFrame {
 	};
 
 	// 扫雷按钮事件
-	private ActionListener sweepActionListener = new ActionListener() {
+	private MouseAdapter sweepActionListener = new MouseAdapter() {
 
 		@Override
-		public void actionPerformed(ActionEvent e) {
+		public void mouseClicked(MouseEvent e) {
 			Object obj = e.getSource();
+			int btn = e.getButton();
 			// 遍历所有按钮
 			for (int row = 0; row < tiles.length; row++) {
 				for (int col = 0; col < tiles[0].length; col++) {
 					// 匹配发生点击事件的按钮
 					if (obj == covers[row][col]) {
-						open(row, col);
+						if (btn == MouseEvent.BUTTON1) {
+							open(row, col); // 左键翻开
+						} else if (btn == MouseEvent.BUTTON3) {
+							flag(row, col); // 右键标记
+						}
 						row = tiles.length; // 使条件失效以跳出循环
 						break;
 					}
 				}
 			}
+
+			super.mouseClicked(e);
 		}
+
 	};
 
 	/**
@@ -77,7 +92,7 @@ public class GUI extends JFrame {
 		// 设置窗口 (Frame)
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setBounds(200, 200, 640, 480);
-		
+
 		// 显示标题界面
 		showTitle();
 	}
@@ -86,9 +101,9 @@ public class GUI extends JFrame {
 	 * 显示标题界面
 	 */
 	private void showTitle() {
-		
+
 		setTitle(TITLE);
-		
+
 		// 设置容器 (Panel)
 		titlePane = new JPanel();
 		titlePane.setLayout(null);
@@ -135,9 +150,6 @@ public class GUI extends JFrame {
 		tiles = new JLabel[rowSize][colSize];
 		covers = new JButton[rowSize][colSize];
 
-		// 颜色 (1~8)
-		Color[] colors = { new Color(64, 80, 192), new Color(16, 102, 0), new Color(176, 0, 0), new Color(0, 0, 128), new Color(128, 0, 0), new Color(0, 128, 128), new Color(160, 0, 0), new Color(176, 0, 0) };
-
 		// 创建容器 (Panel)
 		gamePane = new JPanel();
 		gamePane.setLayout(null);
@@ -155,12 +167,10 @@ public class GUI extends JFrame {
 				tiles[r][c].setFont(new Font(null, Font.BOLD, tileSize * 3 / 4));
 				if (num == 0) {
 					tiles[r][c].setText("");
-					;
 				} else if (num > 0 && num < 9) {
-					tiles[r][c].setForeground(colors[num - 1]);
-				} else {
-					tiles[r][c].setOpaque(true);
-					tiles[r][c].setBackground(Color.yellow);
+					tiles[r][c].setForeground(COLORS_NUM[num - 1]);
+				} else if (core.grids[r][c] == Core.MINE) {
+					tiles[r][c].setText(SYMBOL_MINE);
 				}
 				tiles[r][c].setVisible(false);
 
@@ -169,7 +179,8 @@ public class GUI extends JFrame {
 				gamePane.add(covers[r][c]);
 				covers[r][c].setBounds(paddingHorizontal + tileSize * c, paddingVertical + tileSize * r, tileSize, tileSize);
 				covers[r][c].setBorder(BorderFactory.createLineBorder(Color.GRAY));
-				covers[r][c].addActionListener(sweepActionListener);
+				covers[r][c].setFont(new Font(null, Font.BOLD, tileSize * 3 / 4));
+				covers[r][c].addMouseListener(sweepActionListener);
 			}
 		}
 	}
@@ -178,37 +189,77 @@ public class GUI extends JFrame {
 	 * 翻开格子
 	 * 
 	 * @param row
+	 *            行索引 (从0起算)
 	 * @param col
+	 *            列索引 (从0起算)
 	 */
 	private void open(int row, int col) {
-		core.open(row, col);
 
-		setTitle("remain: " + core.remain);
+		// 没有标记且未翻开才可翻开
+		if (core.status[row][col] == Core.STAT_COVER) {
+			core.open(row, col);
 
-		// 刷新所有格子状态
-		for (int r = 0; r < tiles.length; r++) {
-			for (int c = 0; c < tiles[0].length; c++) {
-				boolean isOpened = core.status[r][c] == Core.STAT_OPEN;
-				tiles[r][c].setVisible(isOpened);
-				covers[r][c].setVisible(!isOpened);
+			setTitle(TITLE + " ( Remain: " + core.remain + " , Flag: " + core.flags + " )");
 
-				// 游戏结束则标出雷的位置
-				if (core.isGameover && core.isMine(r, c)) {
-					covers[r][c].setText("" + Core.MINE);
+			// 刷新所有格子状态
+			for (int r = 0; r < tiles.length; r++) {
+				for (int c = 0; c < tiles[0].length; c++) {
+					boolean isOpened = core.status[r][c] == Core.STAT_OPEN;
+					tiles[r][c].setVisible(isOpened);
+					covers[r][c].setVisible(!isOpened);
+
+					// 游戏结束则标出雷的位置
+					if (core.isGameover) {
+						if (core.isMine(r, c)&&core.status[r][c] == Core.STAT_COVER ) {
+							// 未标记的雷
+							covers[r][c].setText(SYMBOL_MINE);
+						} else if (core.isMine(r, c)&&core.status[r][c] == Core.STAT_FLAG ){
+							// 标记正确的雷
+							covers[r][c].setForeground(new Color(64, 128, 96));
+						} else if(!core.isMine(r, c)&&core.status[r][c] == Core.STAT_FLAG){
+							// 标记错误的雷
+							covers[r][c].setForeground(Color.RED);
+						}
+					}
 				}
 			}
-		}
 
-		if (core.isGameover) {
-			tiles[row][col].setOpaque(true);
-			tiles[row][col].setBackground(Color.RED);
-			JOptionPane.showMessageDialog(null, "  Gameover ...", TITLE, JOptionPane.ERROR_MESSAGE);
-			showTitle();
-		} else if (core.isWin) {
-			JOptionPane.showMessageDialog(null, "  You Win !", TITLE, JOptionPane.PLAIN_MESSAGE);
-			showTitle();
+			// 游戏结束判定
+			if (core.isGameover) {
+				tiles[row][col].setOpaque(true);
+				tiles[row][col].setBackground(Color.RED);
+				JOptionPane.showMessageDialog(null, "  Gameover ...", TITLE, JOptionPane.ERROR_MESSAGE);
+				showTitle();
+			} else if (core.isWin) {
+				JOptionPane.showMessageDialog(null, "  You Win !", TITLE, JOptionPane.PLAIN_MESSAGE);
+				showTitle();
+			}
 		}
+	}
 
+	/**
+	 * 标记格子
+	 * 
+	 * @param row
+	 *            行索引 (从0起算)
+	 * @param col
+	 *            列索引 (从0起算)
+	 */
+	private void flag(int row, int col) {
+
+		// 未翻开才可标记
+		if (core.status[row][col] != Core.STAT_OPEN) {
+			core.flag(row, col);
+
+			setTitle(TITLE + " ( Remain: " + core.remain + " , Flag: " + core.flags + " )");
+
+			// 刷新格子状态
+			if (core.status[row][col] == Core.STAT_FLAG) {
+				covers[row][col].setText(SYMBOL_FLAG);
+			} else {
+				covers[row][col].setText("");
+			}
+		}
 	}
 
 	/**
