@@ -30,11 +30,16 @@ public class Core {
 	public static final int STAT_COVER = 1;
 	public static final int STAT_FLAG = 2;
 
+	// 行列偏移量常量 (位于↖,↑,↗,←,→,↙,↓,↘)
+	public static final int[] OFFSET_AROUND_ROW = { -1, -1, -1, 0, 0, 1, 1, 1 };
+	public static final int[] OFFSET_AROUND_COL = { -1, 0, 1, -1, 1, -1, 0, 1 };
+
 	// 游戏状态
 	public boolean isGameover;
 	public boolean isWin;
 	public int remain; // 待翻开格子数
 	public int flags; // 标记数量
+	public int deadRow, deadCol; // 爆炸发生的格子索引
 
 	// 格子
 	public char[][] grids;
@@ -87,9 +92,9 @@ public class Core {
 		status = new int[rowSize][colSize];
 
 		// 随机生成地雷
+		int rCol;
+		int rRow;
 		for (int i = 0; i < mineSize; i++) {
-			int rCol;
-			int rRow;
 			do {
 				rRow = (int) (Math.random() * rowSize);
 				rCol = (int) (Math.random() * colSize);
@@ -102,13 +107,26 @@ public class Core {
 			for (int col = 0; col < grids[row].length; col++) {
 				// 计算
 				if (!isMine(row, col)) {
-					grids[row][col] = (char) (countAround(row, col) + '0');
+					grids[row][col] = (char) (countMinesAround(row, col) + '0');
 				}
 				// 盖住
 				status[row][col] = STAT_COVER;
 			}
 		}
 
+	}
+
+	/**
+	 * 判断指定行列是否越界
+	 * 
+	 * @param row
+	 *            行索引 (从0起算)
+	 * @param col
+	 *            列索引 (从0起算)
+	 * @return 若指定行列为地雷则返回true
+	 */
+	public boolean isOutOfBound(int row, int col) {
+		return row < 0 || col < 0 || row >= grids.length || col >= grids[0].length;
 	}
 
 	/**
@@ -126,7 +144,23 @@ public class Core {
 		}
 		return false;
 	}
-	
+
+	/**
+	 * 判断指定行列是否已标记
+	 * 
+	 * @param row
+	 *            行索引 (从0起算)
+	 * @param col
+	 *            列索引 (从0起算)
+	 * @return 若指定行列已标记则返回true
+	 */
+	public boolean isFlag(int row, int col) {
+		if (status[row][col] == STAT_FLAG) {
+			return true;
+		}
+		return false;
+	}
+
 	/**
 	 * 计算指定行列周围一圈地雷数量
 	 * 
@@ -136,17 +170,16 @@ public class Core {
 	 *            列索引 (从0起算)
 	 * @return 指定行列周围一圈的地雷数量
 	 */
-	public int countAround(int row, int col) {
-		// 行列偏移量 (位于↖,↑,↗,←,→,↙,↓,↘)
-		int[] offsetR = { -1, -1, -1, 0, 0, 1, 1, 1 };
-		int[] offsetC = { -1, 0, 1, -1, 1, -1, 0, 1 };
+	public int countMinesAround(int row, int col) {
 
 		int mineCount = 0;
-		for (int i = 0; i < offsetR.length; i++) {
-			int r = row + offsetR[i];
-			int c = col + offsetC[i];
-			boolean isOutOfBound = r < 0 || c < 0 || r >= grids.length || c >= grids[0].length;
-			if (!isOutOfBound && isMine(r, c)) {
+
+		// 遍历周边格子
+		for (int i = 0; i < OFFSET_AROUND_ROW.length; i++) {
+			int r = row + OFFSET_AROUND_ROW[i];
+			int c = col + OFFSET_AROUND_COL[i];
+
+			if (!isOutOfBound(r, c) && isMine(r, c)) {
 				mineCount++;
 			}
 		}
@@ -154,44 +187,28 @@ public class Core {
 	}
 
 	/**
-	 * 翻开指定格子
+	 * 计算指定行列周围一圈的标记数量
 	 * 
 	 * @param row
 	 *            行索引 (从0起算)
 	 * @param col
 	 *            列索引 (从0起算)
+	 * @return 指定行列周围一圈的标记数量
 	 */
-	public void open(int row, int col) {
-		status[row][col] = STAT_OPEN;
-		remain--;
+	public int countFlagsAround(int row, int col) {
 
-		// 如果翻到周围无雷的格子，则继续翻开周围一圈
-		if (grids[row][col] == '0') {
-			// 行列偏移量 (位于↖,↑,↗,←,→,↙,↓,↘)
-			int[] offsetR = { -1, -1, -1, 0, 0, 1, 1, 1 };
-			int[] offsetC = { -1, 0, 1, -1, 1, -1, 0, 1 };
+		int flagCount = 0;
 
-			for (int i = 0; i < offsetR.length; i++) {
-				int r = row + offsetR[i];
-				int c = col + offsetC[i];
+		// 遍历周边格子
+		for (int i = 0; i < OFFSET_AROUND_ROW.length; i++) {
+			int r = row + OFFSET_AROUND_ROW[i];
+			int c = col + OFFSET_AROUND_COL[i];
 
-				// 翻开未越界且未翻开的
-				boolean isOutOfBound = r < 0 || c < 0 || r >= grids.length || c >= grids[0].length;
-				if (!isOutOfBound && status[r][c] == STAT_COVER) {
-					open(r, c);
-				}
+			if (!isOutOfBound(r, c) && isFlag(r, c)) {
+				flagCount++;
 			}
 		}
-
-		// 踩雷判定
-		if (isMine(row, col)) {
-			isGameover = true;
-		}
-
-		// 胜利判定
-		if (remain == 0) {
-			isWin = true;
-		}
+		return flagCount;
 	}
 
 	/**
@@ -210,6 +227,72 @@ public class Core {
 			} else {
 				status[row][col] = STAT_COVER;
 				flags--;
+			}
+		}
+	}
+
+	/**
+	 * 翻开指定格子
+	 * 
+	 * @param row
+	 *            行索引 (从0起算)
+	 * @param col
+	 *            列索引 (从0起算)
+	 */
+	public void open(int row, int col) {
+		status[row][col] = STAT_OPEN;
+		remain--;
+
+		// 如果翻到周围无雷的格子，则继续翻开周围一圈
+		if (grids[row][col] == '0') {
+
+			// 遍历周边格子
+			for (int i = 0; i < OFFSET_AROUND_ROW.length; i++) {
+				int r = row + OFFSET_AROUND_ROW[i];
+				int c = col + OFFSET_AROUND_COL[i];
+
+				// 翻开未越界且未翻开的
+				if (!isOutOfBound(r, c) && status[r][c] == STAT_COVER) {
+					open(r, c);
+				}
+			}
+		}
+
+		// 踩雷判定
+		if (isMine(row, col)) {
+			deadRow = row;
+			deadCol = col;
+			isGameover = true;
+		}
+
+		// 胜利判定
+		if (remain == 0) {
+			isWin = true;
+		}
+	}
+
+	/**
+	 * 快速排雷 (若周边雷数与周边标记数一致，则翻开周边未标记的格子)
+	 * 
+	 * @param row
+	 *            行索引 (从0起算)
+	 * @param col
+	 *            列索引 (从0起算)
+	 */
+	public void sweep(int row, int col) {
+
+		// 若周边雷数与周边标记数一致
+		if (countFlagsAround(row, col) == countMinesAround(row, col)) {
+
+			// 遍历周边格子
+			for (int i = 0; i < OFFSET_AROUND_ROW.length; i++) {
+				int r = row + OFFSET_AROUND_ROW[i];
+				int c = col + OFFSET_AROUND_COL[i];
+
+				// 翻开未越界且未翻开的
+				if (!isOutOfBound(r, c) && status[r][c] == STAT_COVER) {
+					open(r, c);
+				}
 			}
 		}
 	}
