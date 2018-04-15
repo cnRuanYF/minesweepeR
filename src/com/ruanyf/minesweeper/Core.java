@@ -7,8 +7,6 @@ package com.ruanyf.minesweeper;
  */
 public class Core {
 
-	public static final String TITLE = "minesweepeR";
-
 	public static final char MINE = 'M';
 
 	// 默认参数常量
